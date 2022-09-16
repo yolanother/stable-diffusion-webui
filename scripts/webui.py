@@ -2231,6 +2231,10 @@ def run_headless():
         print(stats)
         print()
 
+import remote_sd_service
+service = remote_sd_service.FirebaseRemoteSDService()
+service.start()
+
 if __name__ == '__main__':
     if opt.cli is None:
         launch_server()

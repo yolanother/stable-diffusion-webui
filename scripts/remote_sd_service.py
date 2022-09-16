@@ -1,11 +1,11 @@
 from firebase_job_queue import FirebaseJobQueue
-import webui
 
 class FirebaseRemoteSDService(FirebaseJobQueue):
-    def __init__(self, webui):
+    def __init__(self, tex2img):
         super().__init__()
         self.job_queue = FirebaseJobQueue()
         self.job_queue.on_begin_job = self.on_begin_job
+        self.tex2img = tex2img
         
     def start(self):
         self.job_queue.monitor_jobs()
@@ -29,7 +29,7 @@ class FirebaseRemoteSDService(FirebaseJobQueue):
             variant_amount = job["variant_amount"] if "variant_amount" in job else 0.0
             variant_seed = job["variant_seed"] if "variant_seed" in job else ''
 
-            webui.txt2img(prompt,\
+            self.txt2img(prompt,\
                     ddim_steps,\
                     sampler_name, \
                     toggles, \

@@ -2232,7 +2232,8 @@ def run_headless():
         print()
 
 import remote_sd_service
-service = remote_sd_service.FirebaseRemoteSDService()
+print ("Starting firebase service...")
+service = remote_sd_service.FirebaseRemoteSDService(txt2img)
 service.start()
 
 if __name__ == '__main__':

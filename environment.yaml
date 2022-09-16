@@ -15,7 +15,6 @@ dependencies:
   - urllib3
   - requests
   - pip:
-    - pyrebase
     - albumentations==0.4.3
     - opencv-python==4.1.2.30
     - opencv-python-headless==4.1.2.30

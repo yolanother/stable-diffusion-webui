@@ -1,4 +1,5 @@
 import pyrebase
+import time
 from firebasedata import LiveData
 from firebase_config import config
 from firebase_config import host_config
@@ -24,6 +25,11 @@ class FirebaseJobQueue:
         print ("Logged in.")
         self.db = self.firebase.database()
         self.db.child("jobs").child("queue").stream(self.on_jobs_changed)
+        self.ping()
+
+    def ping(self):
+        self.db.child("jobs").child("nodes").child(self.hostname).set(time.time(), self.idToken)
+
 
 
     # Write data
@@ -45,6 +51,7 @@ class FirebaseJobQueue:
         self.update_state(job, "processing")
 
     def handle_work(self, job):
+        self.ping()
         if 'state' in job and job['state'] == "complete":
             return True
         elif not self.busy:

@@ -12,7 +12,7 @@ class FirebaseRemoteSDService(FirebaseJobQueue):
 
     def on_begin_job(self, job):
         print("on_begin_job")
-        if job["type"] == "text":
+        if "type" in job and job["type"] == "text":
             prompt = job["prompt"]
             width = job["width"] if "width" in job else 512
             height = job["height"] if "height" in job else 512
@@ -29,7 +29,7 @@ class FirebaseRemoteSDService(FirebaseJobQueue):
             variant_amount = job["variant_amount"] if "variant_amount" in job else 0.0
             variant_seed = job["variant_seed"] if "variant_seed" in job else ''
 
-            self.txt2img(prompt,\
+            self.tex2img(prompt,\
                     ddim_steps,\
                     sampler_name, \
                     toggles, \

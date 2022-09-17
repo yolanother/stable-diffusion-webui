@@ -74,25 +74,29 @@ class FirebaseRemoteSDService(FirebaseJobQueue):
 
             print("Generating prompt: " + prompt)
 
-            (output_images, seed, info, stats) = self.tex2img(prompt,\
-                    ddim_steps,\
-                    sampler_name, \
-                    toggles, \
-                    realesrgan_model_name,\
-                    ddim_eta, \
-                    n_iter, \
-                    batch_size, \
-                    cfg_scale, \
-                    seed,\
-                    height, \
-                    width, \
-                    fp, \
-                    variant_amount, \
-                    variant_seed)
+            try:
+                (output_images, seed, info, stats) = self.tex2img(prompt,\
+                        ddim_steps,\
+                        sampler_name, \
+                        toggles, \
+                        realesrgan_model_name,\
+                        ddim_eta, \
+                        n_iter, \
+                        batch_size, \
+                        cfg_scale, \
+                        seed,\
+                        height, \
+                        width, \
+                        fp, \
+                        variant_amount, \
+                        variant_seed)
 
-            job["seed"] = seed
-            job = self.save_images(job, output_images, info)
-            print ("Finished job %s %s" % (job["name"], job))
+                job["seed"] = seed
+                job = self.save_images(job, output_images, info)
+                print ("Finished job %s %s" % (job["name"], job))
+            except:
+                self.job_queue.log("Error generating image", job)
+                return
             self.job_queue.job_complete(job=job)
             return
 

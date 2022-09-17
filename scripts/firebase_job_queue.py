@@ -24,12 +24,18 @@ class FirebaseJobQueue:
         print (self.auth)
         print ("Logged in.")
         self.db = self.firebase.database()
-        self.db.child("jobs").child("queue").stream(self.on_jobs_changed)
+        self.db.child("jobs").child("queue").stream(self.on_jobs_changed, self.idToken)
+        self.db.child("jobs").child("ping").stream(self.pong, self.idToken)
         self.ping()
 
-    def ping(self):
-        self.db.child("jobs").child("nodes").child(self.hostname).set(time.time(), self.idToken)
+    def pong(self, response):
+        print (response)
+        self.ping_time = response['data']
+        self.db.child("jobs").child("nodes").child(self.hostname).set(self.ping_time, self.idToken)
 
+    def ping(self):
+        self.ping_time = time.time()
+        self.db.child("jobs").child("ping").set(time.time(), self.idToken)
 
 
     # Write data

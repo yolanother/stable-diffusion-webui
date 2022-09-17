@@ -6,6 +6,7 @@ from firebase_config import config
 from firebase_config import host_config
 
 class FirebaseRemoteSDService(FirebaseJobQueue):
+
     def __init__(self, tex2img):
         super().__init__()
         self.job_queue = FirebaseJobQueue()
@@ -20,8 +21,10 @@ class FirebaseRemoteSDService(FirebaseJobQueue):
         storage = self.job_queue.firebase.storage()
         if name is None:
             name = file
-        target = storage.child(job["type"]).child(name).put(file, self.job_queue.idToken)
-        return storage.child(job["type"]).child(name).get_url(None)
+        storage.child(job["type"]).child(name).put(file, self.job_queue.idToken)
+        url = storage.child(job["type"]).child(name).get_url(None)
+        print ("Generated url %s" % url)
+        return url
 
     def save_images(self, job, images, info):
         count = 1
@@ -30,7 +33,7 @@ class FirebaseRemoteSDService(FirebaseJobQueue):
             file = "%s-%s-%d.png" % (job["name"], time.time(), count)
             image.save(file, format="PNG")
             self.job_queue.log("Saving image %s" % file)
-            self.save_image(job, file)
+            imageset.append(self.save_image(job, file))
             os.remove(file)
             count += 1
 
@@ -39,8 +42,8 @@ class FirebaseRemoteSDService(FirebaseJobQueue):
             grid_path = os.path.join(info['outpath'], grid_file)
             job["grid"] = self.save_image(job, grid_path, grid_file)
 
-
         job["images"] = imageset
+        return job
 
     def on_begin_job(self, job):
         if "type" not in job:
@@ -87,8 +90,8 @@ class FirebaseRemoteSDService(FirebaseJobQueue):
                     variant_amount, \
                     variant_seed)
 
-            self.save_images(job, output_images, info)
             job["seed"] = seed
+            job = self.save_images(job, output_images, info)
             print ("Finished job %s %s" % (job["name"], job))
             self.job_queue.job_complete(job=job)
             return

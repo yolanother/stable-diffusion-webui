@@ -2,6 +2,7 @@ import pyrebase
 import time
 from firebase_config import config
 from firebase_config import host_config
+import power_manager
 # Requirements
 # collections
 # pyrebase
@@ -12,6 +13,7 @@ class FirebaseJobQueue:
     localjobqueue = []
     localjobmap = dict()
     on_begin_job = None
+    inhibitor = power_manager.WindowsInhibitor()
 
     def __init__(self):
         self.config = config
@@ -92,7 +94,7 @@ class FirebaseJobQueue:
     def handle_work(self, job):
         self.log("Handling work for job", job)
         if not self.is_queued(job):
-            self.ping()
+            #self.ping()
             if 'state' in job and job['state'] == "complete":
                 return True
             elif not self.busy:
@@ -112,16 +114,21 @@ class FirebaseJobQueue:
             self.log ("Processing for job has begun.", job)
             job = self.next_job()
             if job is not None:
-                self.busy = True
-                self.announce(job, False)
-                self.announce_processing(job, True)
-                self.on_begin_job(job)
+                self.begin_job(job)
             else:
                 self.log ("No jobs left to process.")
         else:
             self.log("System is currently processing %s." % self.active_job["name"], job)
 
+    def begin_job(self, job):
+        self.inhibitor.inhibit()
+        self.busy = True
+        self.announce(job, False)
+        self.announce_processing(job, True)
+        self.on_begin_job(job)
+
     def job_complete(self, job, status="complete"):
+        self.inhibitor.uninhibit()
         self.busy = False
         job["state"] = status
         self.get_queue_node(job).set(job, self.idToken)

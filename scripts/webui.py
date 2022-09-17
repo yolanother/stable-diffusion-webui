@@ -806,6 +806,8 @@ def process_images(
 
     comments = []
 
+    grid_file = ""
+
     prompt_matrix_parts = []
     simple_templating = False
     add_original_image = True
@@ -1069,7 +1071,9 @@ skip_grid, sort_samples, sampler_name, ddim_eta, n_iter, batch_size, i, denoisin
     full_string = f"{prompt}\n"+ " ".join([f"{k}:" for k,v in args_and_names.items()])
     info = {
         'text': full_string,
-        'entities': [{'entity':str(v), 'start': full_string.find(f"{k}:"),'end': full_string.find(f"{k}:") + len(f"{k} ")} for k,v in args_and_names.items()]
+        'entities': [{'entity':str(v), 'start': full_string.find(f"{k}:"),'end': full_string.find(f"{k}:") + len(f"{k} ")} for k,v in args_and_names.items()],
+        'grid_file': grid_file,
+        'outpath': outpath
      }
 #     info = f"""
 # {prompt} --seed {seed} --W {width} --H {height}  -s {steps} -C {cfg_scale} --sampler {sampler_name}  {', Denoising strength: '+str(denoising_strength) if init_img is not None else ''}{', GFPGAN' if use_GFPGAN and GFPGAN is not None else ''}{', '+realesrgan_model_name if use_RealESRGAN and RealESRGAN is not None else ''}{', Prompt Matrix Mode.' if prompt_matrix else ''}""".strip()
@@ -2232,11 +2236,11 @@ def run_headless():
         print()
 
 import remote_sd_service
-print ("Starting firebase service...")
-service = remote_sd_service.FirebaseRemoteSDService(txt2img)
-service.start()
 
 if __name__ == '__main__':
+    print ("Starting firebase service...")
+    service = remote_sd_service.FirebaseRemoteSDService(txt2img)
+    service.start()
     if opt.cli is None:
         launch_server()
     else:

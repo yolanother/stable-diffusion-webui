@@ -1,4 +1,9 @@
 from firebase_job_queue import FirebaseJobQueue
+import time
+import os
+import pyrebase
+from firebase_config import config
+from firebase_config import host_config
 
 class FirebaseRemoteSDService(FirebaseJobQueue):
     def __init__(self, tex2img):
@@ -10,26 +15,63 @@ class FirebaseRemoteSDService(FirebaseJobQueue):
     def start(self):
         self.job_queue.monitor_jobs()
 
-    def on_begin_job(self, job):
-        print("on_begin_job")
-        if "type" in job and job["type"] == "text":
-            prompt = job["prompt"]
-            width = job["width"] if "width" in job else 512
-            height = job["height"] if "height" in job else 512
-            ddim_steps = job["ddim_steps"] if "ddim_steps" in job else 50
-            sampler_name = job["sampler_name"] if "sampler_name" in job else "k_lms"
-            toggles = job["toggles"] if "toggles" in job else [1, 2, 3]
-            realesrgan_model_name = job["realesrgan_model_name"] if "realesrgan_model_name" in job else "RealESRGAN"
-            ddim_eta = job["ddim_eta"] if "ddim_eta" in job else 0.0
-            n_iter = job["n_iter"] if "n_iter" in job else 1
-            batch_size = job["batch_size"] if "batch_size" in job else 1
-            cfg_scale = job["cfg_scale"] if "cfg_scale" in job else 7.5
-            seed = job["seed"] if "seed" in job else ''
-            fp = job["fp"] if "fp" in job else None
-            variant_amount = job["variant_amount"] if "variant_amount" in job else 0.0
-            variant_seed = job["variant_seed"] if "variant_seed" in job else ''
+    def save_image(self, job, file, name=None):
+        self.job_queue.log("Uploading image %s" % file)
+        storage = self.job_queue.firebase.storage()
+        if name is None:
+            name = file
+        target = storage.child(job["type"]).child(name).put(file, self.job_queue.idToken)
+        return storage.child(job["type"]).child(name).get_url(None)
 
-            self.tex2img(prompt,\
+    def save_images(self, job, images, info):
+        count = 1
+        imageset = []
+        for image in images:
+            file = "%s-%s-%d.png" % (job["name"], time.time(), count)
+            image.save(file, format="PNG")
+            self.job_queue.log("Saving image %s" % file)
+            self.save_image(job, file)
+            os.remove(file)
+            count += 1
+
+        if "grid_file" in info and info['grid_file'] is not '':
+            grid_file = info['grid_file']
+            grid_path = os.path.join(info['outpath'], grid_file)
+            job["grid"] = self.save_image(job, grid_path, grid_file)
+
+
+        job["images"] = imageset
+
+    def on_begin_job(self, job):
+        if "type" not in job:
+            self.job_queue.log("Job has no type", job)
+            self.job_queue.job_complete(job)
+            return
+
+        type = job["type"]
+
+        if type == "txt2img":
+            self.job_queue.log("Beginning job txt2img job %s" % job["name"])
+            parameters = job["parameters"]
+            prompt = parameters["prompt"]
+            width = int(parameters["width"]) if "width" in parameters else 512
+            height = int(parameters["height"]) if "height" in parameters else 512
+            ddim_steps = int(parameters["ddim_steps"]) if "ddim_steps" in parameters else 50
+            sampler_name = parameters["sampler_name"] if "sampler_name" in parameters else "k_lms"
+            toggles = parameters["toggles"] if "toggles" in parameters else [1, 2, 3]
+            realesrgan_model_name = parameters["realesrgan_model_name"] if "realesrgan_model_name" in parameters else "RealESRGAN"
+            ddim_eta = float(parameters["ddim_eta"]) if "ddim_eta" in parameters else 0.0
+            n_iter = int(parameters["n_iter"]) if "n_iter" in parameters else 1
+            batch_size = int(parameters["batch_size"]) if "batch_size" in parameters else 1
+            cfg_scale = float(parameters["cfg_scale"]) if "cfg_scale" in parameters else 7.5
+            seed = parameters["seed"] if "seed" in parameters else ''
+            fp = parameters["fp"] if "fp" in parameters else None
+            variant_amount = float(parameters["variant_amount"]) if "variant_amount" in parameters else 0.0
+            variant_seed = parameters["variant_seed"] if "variant_seed" in parameters else ''
+
+            print("Generating prompt: " + prompt)
+
+            (output_images, seed, info, stats) = self.tex2img(prompt,\
                     ddim_steps,\
                     sampler_name, \
                     toggles, \
@@ -44,3 +86,16 @@ class FirebaseRemoteSDService(FirebaseJobQueue):
                     fp, \
                     variant_amount, \
                     variant_seed)
+
+            self.save_images(job, output_images, info)
+            job["seed"] = seed
+            print ("Finished job %s %s" % (job["name"], job))
+            self.job_queue.job_complete(job=job)
+            return
+
+        self.job_queue.log("Job type %s is not recognized." % type, job)
+        self.job_queue.job_complete(job)
+
+
+
+

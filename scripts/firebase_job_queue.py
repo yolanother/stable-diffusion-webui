@@ -10,6 +10,7 @@ from firebase_config import host_config
 class FirebaseJobQueue:
     busy = False
     localjobqueue = []
+    localjobmap = dict()
     on_begin_job = None
 
     def __init__(self):
@@ -18,9 +19,9 @@ class FirebaseJobQueue:
 
     def monitor_jobs(self):
         self.firebase = pyrebase.initialize_app(config)
-        auth = self.firebase.auth().sign_in_with_email_and_password("firebasejobqueue@doubtech.com", config["apiKey"])
-        self.idToken = auth['idToken']
-        print (auth)
+        self.auth = self.firebase.auth().sign_in_with_email_and_password("firebasejobqueue@doubtech.com", config["apiKey"])
+        self.idToken = self.auth['idToken']
+        print (self.auth)
         print ("Logged in.")
         self.db = self.firebase.database()
         self.db.child("jobs").child("queue").stream(self.on_jobs_changed)
@@ -41,50 +42,88 @@ class FirebaseJobQueue:
     def get_queue_node(self, job):
         return self.db.child("jobs").child("queue").child(job["name"])
 
+    def log(self, message, job=None):
+        if job is None:
+            print ("[JOB QUEUE] %s" % message)
+        else:
+            print ("[JOB QUEUE - %s] %s" % (job["name"], message))
+
     def announce(self, job, busy):
-        print("write availability for job %s" % job)
+        self.log("Announcing availability for job is %s" % busy, job)
         self.get_avail_node(job).set(busy, self.idToken)
 
     def announce_processing(self, job, busy):
-        print("write availability for job %s" % job)
+        self.log("Announcing availability for job is %s" % busy, job)
         self.update_state(job, "processing")
 
+    def job(self, job, overwrite=False):
+        if overwrite or job["name"] not in self.localjobmap:
+            self.localjobmap[job["name"]] = job
+        return job
+
+    def next_job(self):
+        if len(self.localjobqueue) > 0:
+            job = self.localjobmap[self.localjobqueue[0]]
+            self.active_job = job
+            return job
+        return None
+
+    def dequeue(self, job):
+        if self.is_queued(job):
+            self.localjobqueue.remove(job["name"])
+            del self.localjobmap[job["name"]]
+            if self.active_job == self.job(job):
+                self.active_job = None
+
+    def queue(self, job):
+        if job["name"] not in self.localjobqueue:
+            self.job(job, True)
+            self.localjobqueue.append(job["name"])
+
+    def is_queued(self, job):
+        return job["name"] in self.localjobqueue
+
     def handle_work(self, job):
-        self.ping()
-        if 'state' in job and job['state'] == "complete":
-            return True
-        elif not self.busy:
-            self.announce(job, True)
-        if 'worker' in job and job['worker'] == self.hostname:
-            self.processing(job)
-            return True
+        self.log("Handling work for job", job)
+        if not self.is_queued(job):
+            self.ping()
+            if 'state' in job and job['state'] == "complete":
+                return True
+            elif not self.busy:
+                self.announce(job, True)
+            if 'worker' in job and job['worker'] == self.hostname:
+                self.processing(job)
+                return True
         return False
 
     def update_state(self, job, state):
         self.get_queue_node(job).child("state").set(state, self.idToken)
 
     def processing(self, job):
-        if job not in self.localjobqueue:
-            self.localjobqueue.append(job)
+        self.queue(job)
 
         if not self.busy:
-            print ("Processing job %s" % job)
-            job = self.localjobqueue[0]
-            self.busy = True
-            self.announce(job, False)
-            self.announce_processing(job, True)
-            self.on_begin_job(job)
+            self.log ("Processing for job has begun.", job)
+            job = self.next_job()
+            if job is not None:
+                self.busy = True
+                self.announce(job, False)
+                self.announce_processing(job, True)
+                self.on_begin_job(job)
+            else:
+                self.log ("No jobs left to process.")
         else:
-            print ("System busy, queuing job %s" % job)
+            self.log("System is currently processing %s." % self.active_job["name"], job)
 
-    def job_complete(self, job):
+    def job_complete(self, job, status="complete"):
         self.busy = False
-        job["state"] = "complete"
+        job["state"] = status
         self.get_queue_node(job).set(job, self.idToken)
-        if job in self.localjobqueue:
-            self.localjobqueue.remove(job)
+        self.dequeue(job)
+
         self.get_avail_node(job).remove(self.idToken)
 
+        self.log("Job complete", job)
         if len(self.localjobqueue) > 0:
             self.processing(self.localjobqueue[0])
 
@@ -93,22 +132,20 @@ class FirebaseJobQueue:
         path = [x for x in response['path'].split('/') if x]
         if data is None:
             return
-        print (path)
-        print(data)
 
         if len(path) == 0:
             for job_name in data:
-                print ("Updating state for %s" % job_name)
                 job = data[job_name]
                 job["name"] = job_name
-                print (job)
+
+                self.log ("Updating state job state", job)
                 self.handle_work(job)
         elif path is not None and path != "/":
             job_name = path[0]
             job = self.db.child("jobs").child("queue").child(job_name).get().val()
             job["name"] = job_name
-            print ("Data has been updated for job %s" % path[0])
-            print(job)
+
+            self.log ("Received job", job)
             self.handle_work(job)
 
 

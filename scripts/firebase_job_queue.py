@@ -45,7 +45,7 @@ class FirebaseJobQueue:
     # db.child("jobs").push(data)
 
     def get_avail_node(self, job):
-        return self.db.child("jobs").child("available").child(job["name"]).child(self.hostname)
+        return self.get_queue_node(job).child("available-nodes").child(self.hostname)
 
     def get_queue_node(self, job):
         return self.db.child("jobs").child("queue").child(job["name"])
@@ -56,9 +56,9 @@ class FirebaseJobQueue:
         else:
             print ("[JOB QUEUE - %s] %s" % (job["name"], message))
 
-    def announce(self, job, busy):
-        self.log("Announcing availability for job is %s" % busy, job)
-        self.get_avail_node(job).set(busy, self.idToken)
+    def announce(self, job, available):
+        self.log("Announcing availability for job is %s" % (available if 'available' else 'busy'), job)
+        self.get_avail_node(job).set(available, self.idToken)
 
     def announce_processing(self, job, busy):
         self.log("Announcing availability for job is %s" % busy, job)
@@ -149,14 +149,18 @@ class FirebaseJobQueue:
         if len(path) == 0:
             for job_name in data:
                 job = data[job_name]
-                job["name"] = job_name
+                if "name" not in job:
+                    job["name"] = job_name
+                    self.db.child("jobs").child("queue").child(job_name).child("name").set(job_name, self.idToken)
 
                 self.log ("Updating state job state", job)
                 self.handle_work(job)
         elif path is not None and path != "/":
             job_name = path[0]
             job = self.db.child("jobs").child("queue").child(job_name).get().val()
-            job["name"] = job_name
+            if "name" not in job:
+                job["name"] = job_name
+                self.db.child("jobs").child("queue").child(job_name).child("name").set(job_name, self.idToken)
 
             self.log ("Received job", job)
             self.handle_work(job)

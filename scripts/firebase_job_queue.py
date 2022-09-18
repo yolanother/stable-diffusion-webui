@@ -164,6 +164,8 @@ class FirebaseJobQueue:
         self.dequeue(job)
 
         self.get_avail_node(job).remove(self.idToken)
+        self.db.child("jobs").child("nodes").child(self.hostname).child("current-job").set("", self.idToken)
+        self.db.child("jobs").child("nodes").child(self.hostname).child("last-job").set(job['name'], self.idToken)
 
         self.log("Job complete", job)
         if len(self.localjobqueue) > 0:

@@ -3,6 +3,7 @@ import time
 from firebase_config import config
 from firebase_config import host_config
 import power_manager
+import wmi
 # Requirements
 # collections
 # pyrebase
@@ -29,6 +30,26 @@ class FirebaseJobQueue:
         self.db.child("jobs").child("queue").stream(self.on_jobs_changed, self.idToken)
         self.db.child("jobs").child("ping").stream(self.pong, self.idToken)
         self.ping()
+
+        computer = wmi.WMI()
+        computer_info = computer.Win32_ComputerSystem()[0]
+        os_info = computer.Win32_OperatingSystem()[0]
+        proc_info = computer.Win32_Processor()[0]
+        gpu_info = computer.Win32_VideoController()[0]
+
+        os_name = os_info.Name.encode('utf-8').split(b'|')[0]
+        os_version = ' '.join([os_info.Version, os_info.BuildNumber])
+        system_ram = float(os_info.TotalVisibleMemorySize) / 1048576  # KB to GB
+
+        self.db.child("jobs").child("nodes").child(self.hostname).child("os").set(os_name, self.idToken)
+        self.db.child("jobs").child("nodes").child(self.hostname).child("cpu").set(proc_info.Name, self.idToken)
+        self.db.child("jobs").child("nodes").child(self.hostname).child("ram").set(system_ram, self.idToken)
+        self.db.child("jobs").child("nodes").child(self.hostname).child("video").set(gpu_info.Name, self.idToken)
+        print('OS Name: {0}'.format(os_name))
+        print('OS Version: {0}'.format(os_version))
+        print('CPU: {0}'.format(proc_info.Name))
+        print('RAM: {0} GB'.format(system_ram))
+        print('Graphics Card: {0}'.format(gpu_info.Name))
 
     def pong(self, response):
         print (response)

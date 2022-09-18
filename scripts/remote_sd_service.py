@@ -1,9 +1,9 @@
 from firebase_job_queue import FirebaseJobQueue
 import time
 import os
-import pyrebase
-from firebase_config import config
-from firebase_config import host_config
+from frontend.job_manager import JobInfo, UpdateCallbacks
+from webui import txt2img
+
 
 class FirebaseRemoteSDService(FirebaseJobQueue):
 
@@ -26,23 +26,37 @@ class FirebaseRemoteSDService(FirebaseJobQueue):
         print ("Generated url %s" % url)
         return url
 
+    def save_mem_image(self, job, image, file=None, index=None):
+        if file is None:
+            if index is None:
+                file = "%s-%s-%d.png" % (job["name"], time.time(), index)
+            else:
+                file = "%s-%s.png" % (job["name"], time.time())
+
+        image.save(file, format="PNG")
+        self.job_queue.log("Saving image %s" % file)
+        image_set = job["images"]
+        if image_set is None:
+            image_set = []
+        image_set.append(self.save_image(job, file))
+        job["images"] = image_set
+        self.job_queue.update_job(job)
+
+        os.remove(file)
+
     def save_images(self, job, images, info):
         count = 1
         imageset = []
-        for image in images:
-            file = "%s-%s-%d.png" % (job["name"], time.time(), count)
-            image.save(file, format="PNG")
-            self.job_queue.log("Saving image %s" % file)
-            imageset.append(self.save_image(job, file))
-            os.remove(file)
-            count += 1
+        #for image in images:
+        #    self.save_mem_image(job, image, None, count)
+        #    count += 1
 
         if "grid_file" in info and info['grid_file'] is not '':
             grid_file = info['grid_file']
             grid_path = os.path.join(info['outpath'], grid_file)
             job["grid"] = self.save_image(job, grid_path, grid_file)
 
-        job["images"] = imageset
+        #job["images"] = imageset
         return job
 
     def on_begin_job(self, job):
@@ -61,7 +75,7 @@ class FirebaseRemoteSDService(FirebaseJobQueue):
             height = int(parameters["height"]) if "height" in parameters else 512
             ddim_steps = int(parameters["ddim_steps"]) if "ddim_steps" in parameters else 50
             sampler_name = parameters["sampler_name"] if "sampler_name" in parameters else "k_lms"
-            toggles = parameters["toggles"] if "toggles" in parameters else [1, 2, 3]
+            toggles = parameters["toggles"] if "toggles" in parameters else [1, 2, 3, 8, 9]
             realesrgan_model_name = parameters["realesrgan_model_name"] if "realesrgan_model_name" in parameters else "RealESRGAN"
             ddim_eta = float(parameters["ddim_eta"]) if "ddim_eta" in parameters else 0.0
             n_iter = int(parameters["n_iter"]) if "n_iter" in parameters else 1
@@ -72,30 +86,36 @@ class FirebaseRemoteSDService(FirebaseJobQueue):
             variant_amount = float(parameters["variant_amount"]) if "variant_amount" in parameters else 0.0
             variant_seed = parameters["variant_seed"] if "variant_seed" in parameters else ''
 
+            callbacks = UpdateCallbacks()
+
+            callbacks.image_added = lambda file, i, image: self.save_mem_image(job, image, file + ".png", i)
+
             print("Generating prompt: " + prompt)
 
+            job["seed"] = seed
+            job["images"] = []
             try:
-                (output_images, seed, info, stats) = self.tex2img(prompt,\
-                        ddim_steps,\
-                        sampler_name, \
-                        toggles, \
-                        realesrgan_model_name,\
-                        ddim_eta, \
-                        n_iter, \
-                        batch_size, \
-                        cfg_scale, \
-                        seed,\
-                        height, \
-                        width, \
-                        fp, \
-                        variant_amount, \
-                        variant_seed)
+                (output_images, seed, info, stats) = txt2img(prompt,\
+                        ddim_steps=ddim_steps,\
+                        sampler_name=sampler_name, \
+                        toggles=toggles, \
+                        realesrgan_model_name=realesrgan_model_name,\
+                        ddim_eta=ddim_eta, \
+                        n_iter=n_iter, \
+                        batch_size=batch_size, \
+                        cfg_scale=cfg_scale, \
+                        seed=seed,\
+                        height=height, \
+                        width=width, \
+                        fp=fp, \
+                        variant_amount=variant_amount, \
+                        variant_seed=variant_seed,\
+                         update_callbacks=callbacks)
 
-                job["seed"] = seed
                 job = self.save_images(job, output_images, info)
                 print ("Finished job %s %s" % (job["name"], job))
-            except:
-                self.job_queue.log("Error generating image", job)
+            except Exception as error:
+                self.job_queue.log(f"Error generating image {error}", job)
                 return
             self.job_queue.job_complete(job=job)
             return

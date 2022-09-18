@@ -127,6 +127,9 @@ class FirebaseJobQueue:
         self.announce_processing(job, True)
         self.on_begin_job(job)
 
+    def update_job(self, job):
+        self.get_queue_node(job).set(job, self.idToken)
+
     def job_complete(self, job, status="complete"):
         self.inhibitor.uninhibit()
         self.busy = False

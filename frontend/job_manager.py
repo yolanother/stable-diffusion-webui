@@ -24,6 +24,10 @@ class JobKey:
 
 
 @dataclass
+class UpdateCallbacks:
+    image_added: Optional[Callable[[str, int, Image], None]] = None
+
+@dataclass
 class JobInfo:
     inputs: List[Component]
     func: Callable

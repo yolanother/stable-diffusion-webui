@@ -1,4 +1,8 @@
 import os, time
+import subprocess
+from subprocess import Popen, PIPE
+import selectors
+import sys
 
 # USER CHANGABLE ARGUMENTS
 
@@ -45,16 +49,27 @@ if open_in_browser == True:
 else:
     inbrowser_argument = ""
 
+def run_process(args):
+    pipe = Popen(args, stdout=PIPE, stderr=subprocess.STDOUT)
+    for line in pipe.stdout:
+        line = line.decode('ascii')
+        # If line contains "Relaunching", relaunch the process
+        if "HTTPError" in str(line):
+            print("Detected an error in the process, relaunching...")
+            pipe.terminate()
+
+        print(line.strip())
+
 n = 0
 while True:
     if n == 0:
         print('Relauncher: Launching...')
-        os.system(f"python scripts/webui.py {common_arguments} {inbrowser_argument} {additional_arguments}")
+        run_process(f"python scripts/webui.py {common_arguments} {inbrowser_argument} {additional_arguments}")
         
     else:
         print(f'\tRelaunch count: {n}')
         print('Relauncher: Launching...')
-        os.system(f"python scripts/webui.py {common_arguments} {additional_arguments}")
+        run_process(f"python scripts/webui.py {common_arguments} {additional_arguments}")
     
     n += 1
     if n > 100:

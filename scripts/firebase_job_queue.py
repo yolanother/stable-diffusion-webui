@@ -50,11 +50,12 @@ class FirebaseJobQueue:
         print('CPU: {0}'.format(proc_info.Name))
         print('RAM: {0} GB'.format(system_ram))
         print('Graphics Card: {0}'.format(gpu_info.Name))
+        self.db.child("jobs").child("nodes").child(self.hostname).child("current-job").set("", self.idToken)
 
     def pong(self, response):
         print (response)
         self.ping_time = response['data']
-        self.db.child("jobs").child("nodes").child(self.hostname).set(self.ping_time, self.idToken)
+        self.db.child("jobs").child("nodes").child(self.hostname).child("ping").set(self.ping_time, self.idToken)
 
     def ping(self):
         self.ping_time = time.time()
@@ -123,6 +124,9 @@ class FirebaseJobQueue:
             if 'worker' in job and job['worker'] == self.hostname:
                 self.processing(job)
                 return True
+            elif 'worker' not in job:
+                self.processing(job)
+                return True
         return False
 
     def update_state(self, job, state):
@@ -132,6 +136,7 @@ class FirebaseJobQueue:
         self.queue(job)
 
         if not self.busy:
+            self.db.child("jobs").child("nodes").child(self.hostname).child("current-job").set(job["name"], self.idToken)
             self.log ("Processing for job has begun.", job)
             job = self.next_job()
             if job is not None:

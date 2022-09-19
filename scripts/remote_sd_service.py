@@ -3,7 +3,7 @@ import time
 import os
 from frontend.job_manager import JobInfo, UpdateCallbacks
 from webui import txt2img
-
+from firebase_config import uploader
 
 class FirebaseRemoteSDService(FirebaseJobQueue):
 
@@ -16,16 +16,6 @@ class FirebaseRemoteSDService(FirebaseJobQueue):
     def start(self):
         self.job_queue.monitor_jobs()
 
-    def save_image(self, job, file, name=None):
-        self.job_queue.log("Uploading image %s" % file)
-        storage = self.job_queue.firebase.storage()
-        if name is None:
-            name = file
-        storage.child(job["type"]).child(name).put(file, self.job_queue.idToken)
-        url = storage.child(job["type"]).child(name).get_url(None)
-        print ("Generated url %s" % url)
-        return url
-
     def save_mem_image(self, job, image, file=None, index=None):
         if file is None:
             if index is None:
@@ -33,12 +23,13 @@ class FirebaseRemoteSDService(FirebaseJobQueue):
             else:
                 file = "%s-%s.png" % (job["name"], time.time())
 
-        image.save(file, format="PNG")
         self.job_queue.log("Saving image %s" % file)
+        image.save(file, format="PNG")
         image_set = job["images"]
         if image_set is None:
             image_set = []
-        image_set.append(self.save_image(job, file))
+        print ("AARON: Using uploader %s" % uploader)
+        image_set.append(uploader.upload_file(file))
         job["images"] = image_set
         self.job_queue.update_job(job)
 
@@ -54,7 +45,7 @@ class FirebaseRemoteSDService(FirebaseJobQueue):
         if "grid_file" in info and info['grid_file'] is not '':
             grid_file = info['grid_file']
             grid_path = os.path.join(info['outpath'], grid_file)
-            job["grid"] = self.save_image(job, grid_path, grid_file)
+            job["grid"] = uploader.upload_file(job, grid_path, grid_file)
 
         #job["images"] = imageset
         return job

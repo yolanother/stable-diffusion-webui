@@ -50,9 +50,9 @@ else:
     inbrowser_argument = ""
 
 def run_process(args):
-    pipe = Popen(args, stdout=PIPE, stderr=subprocess.STDOUT)
+    pipe = Popen(args, stdout=PIPE, stderr=subprocess.STDOUT, bufsize=1, universal_newlines=True)
     for line in pipe.stdout:
-        line = line.decode('ascii')
+        #line = line.decode('ascii')
         # If line contains "Relaunching", relaunch the process
         if "HTTPError" in str(line):
             print("Detected an error in the process, relaunching...")
@@ -64,12 +64,12 @@ n = 0
 while True:
     if n == 0:
         print('Relauncher: Launching...')
-        run_process(f"python scripts/webui.py {common_arguments} {inbrowser_argument} {additional_arguments}")
+        os.system(f"python scripts/webui.py {common_arguments} {inbrowser_argument} {additional_arguments}")
         
     else:
         print(f'\tRelaunch count: {n}')
         print('Relauncher: Launching...')
-        run_process(f"python scripts/webui.py {common_arguments} {additional_arguments}")
+        os.system(f"python scripts/webui.py {common_arguments} {additional_arguments}")
     
     n += 1
     if n > 100:

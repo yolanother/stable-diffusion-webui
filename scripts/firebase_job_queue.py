@@ -1,3 +1,6 @@
+import json
+import os
+
 import pyrebase
 import time
 from firebase_config import config
@@ -19,37 +22,42 @@ class FirebaseJobQueue:
     def __init__(self):
         self.config = config
         self.hostname = host_config['hostname']
+        self.active_job = None
 
     def monitor_jobs(self):
         self.firebase = pyrebase.initialize_app(config)
         self.auth = self.firebase.auth().sign_in_with_email_and_password("firebasejobqueue@doubtech.com", config["apiKey"])
         self.idToken = self.auth['idToken']
-        print (self.auth)
-        print ("Logged in.")
+        self.log ("Logged in.")
         self.db = self.firebase.database()
         self.db.child("jobs").child("queue").stream(self.on_jobs_changed, self.idToken)
         self.db.child("jobs").child("ping").stream(self.pong, self.idToken)
         self.ping()
 
-        computer = wmi.WMI()
-        computer_info = computer.Win32_ComputerSystem()[0]
-        os_info = computer.Win32_OperatingSystem()[0]
-        proc_info = computer.Win32_Processor()[0]
-        gpu_info = computer.Win32_VideoController()[0]
+        if os.path.exists('osinfo.json'):
+            with open('osinfo.json', 'r') as f:
+                osinfo = json.load(f)
+        else:
+            computer = wmi.WMI()
+            computer_info = computer.Win32_ComputerSystem()[0]
+            os_info = computer.Win32_OperatingSystem()[0]
+            proc_info = computer.Win32_Processor()[0]
+            gpu_info = computer.Win32_VideoController()[0]
 
-        os_name = os_info.Name.encode('utf-8').split(b'|')[0]
-        os_version = ' '.join([os_info.Version, os_info.BuildNumber])
-        system_ram = float(os_info.TotalVisibleMemorySize) / 1048576  # KB to GB
+            os_name = os_info.Name.encode('utf-8').split(b'|')[0]
+            os_version = ' '.join([os_info.Version, os_info.BuildNumber])
+            system_ram = int(round(float(os_info.TotalVisibleMemorySize) / 1048576))  # KB to GB))
 
-        self.db.child("jobs").child("nodes").child(self.hostname).child("os").set(os_name, self.idToken)
-        self.db.child("jobs").child("nodes").child(self.hostname).child("cpu").set(proc_info.Name, self.idToken)
-        self.db.child("jobs").child("nodes").child(self.hostname).child("ram").set(system_ram, self.idToken)
-        self.db.child("jobs").child("nodes").child(self.hostname).child("video").set(gpu_info.Name, self.idToken)
-        print('OS Name: {0}'.format(os_name))
-        print('OS Version: {0}'.format(os_version))
-        print('CPU: {0}'.format(proc_info.Name))
-        print('RAM: {0} GB'.format(system_ram))
-        print('Graphics Card: {0}'.format(gpu_info.Name))
+            osinfo = {
+                "os": "%s" % os_name,
+                "cpu": "%s" % proc_info.Name,
+                "gpu": "%s" % gpu_info.Name,
+                "ram": "%s" % system_ram
+            }
+            with open('osinfo.json', 'w') as f:
+                json.dump(osinfo, f)
+
+        self.db.child("jobs").child("nodes").child(self.hostname).child("system-info").set(osinfo, self.idToken)
         self.db.child("jobs").child("nodes").child(self.hostname).child("current-job").set("", self.idToken)
 
     def pong(self, response):
@@ -79,8 +87,14 @@ class FirebaseJobQueue:
             print ("[JOB QUEUE - %s] %s" % (job["name"], message))
 
     def announce(self, job, available):
-        self.log("Announcing availability for job is %s" % (available if 'available' else 'busy'), job)
-        self.get_avail_node(job).set(available, self.idToken)
+        self.log("Announcing availability for job is %s to %s" % (available if 'available' else 'busy', self.get_avail_node(job).path), job)
+        if 'available-nodes' not in job or\
+                self.hostname not in job['available-nodes'] or\
+                job['available-nodes'][self.hostname] != available:
+            if "available-nodes" not in job:
+                job['available-nodes'] = {}
+            job['available-nodes'][self.hostname] = available
+            self.get_avail_node(job).set(available, self.idToken)
 
     def announce_processing(self, job, busy):
         self.log("Announcing availability for job is %s" % busy, job)
@@ -106,16 +120,23 @@ class FirebaseJobQueue:
                 self.active_job = None
 
     def queue(self, job):
-        if job["name"] not in self.localjobqueue:
-            self.job(job, True)
-            self.localjobqueue.append(job["name"])
+        try:
+            if 'name' in job and job['name'] not in self.localjobqueue and 'state' not in job:
+                self.job(job, True)
+                self.localjobqueue.append(job["name"])
+        except Exception as e:
+            self.log("Error queuing job: %s" % e, job)
 
     def is_queued(self, job):
-        return job["name"] in self.localjobqueue
+        return 'name' in job and job["name"] in self.localjobqueue
 
     def handle_work(self, job):
         self.log("Handling work for job", job)
-        if not self.is_queued(job):
+        if 'state' in job:
+            if not self.handle_error_state(job):
+                self.log("Job is already being processed, nothing to handle.", job)
+        elif not self.is_queued(job):
+            self.log("Handling work for job", job)
             #self.ping()
             if 'state' in job and job['state'] == "complete":
                 return True
@@ -130,44 +151,70 @@ class FirebaseJobQueue:
         return False
 
     def update_state(self, job, state):
-        self.get_queue_node(job).child("state").set(state, self.idToken)
+        if 'state' not in job or job['state'] != state:
+            job['state'] = state
+            self.get_queue_node(job).child("state").set(state, self.idToken)
 
+    def handle_error_state(self, job):
+        if 'state' in job:
+            if 'worker' in job and job['worker'] == self.hostname \
+                    and self.active_job is not None \
+                    and 'name' in self.active_job \
+                    and self.active_job['name'] != job['name']:
+                self.log("Found what appears to be a dead job, marking it as failed.", job)
+                self.update_state(job, "failed")
+
+            self.job_complete(job, job['state'])
+            return True
+        return False
     def processing(self, job):
-        self.queue(job)
+        try:
+            if self.handle_error_state(job): return
 
-        if not self.busy:
-            self.db.child("jobs").child("nodes").child(self.hostname).child("current-job").set(job["name"], self.idToken)
-            self.log ("Processing for job has begun.", job)
-            job = self.next_job()
-            if job is not None:
-                self.begin_job(job)
+            self.queue(job)
+
+            if not self.busy:
+                if 'worker' not in job:
+                    self.log("Job is not assigned to a worker, picking up the work since I'm idle.r.", job)
+                    self.get_queue_node(job).child("worker").set(self.hostname, self.idToken)
+                self.db.child("jobs").child("nodes").child(self.hostname).child("current-job").set(job["name"], self.idToken)
+                self.log ("Processing for job has begun.", job)
+                job = self.next_job()
+                if job is not None:
+                    self.begin_job(job)
+                else:
+                    self.log ("No jobs left to process.")
             else:
-                self.log ("No jobs left to process.")
-        else:
-            self.log("System is currently processing %s." % self.active_job["name"], job)
+                self.log("System is currently processing %s." % self.active_job["name"], job)
+        except Exception as e:
+            self.job_complete(job, "failed")
 
     def begin_job(self, job):
         self.inhibitor.inhibit()
         self.busy = True
         self.announce(job, False)
         self.announce_processing(job, True)
+        self.active_job = job
         self.on_begin_job(job)
 
     def update_job(self, job):
         self.get_queue_node(job).set(job, self.idToken)
 
     def job_complete(self, job, status="complete"):
-        self.inhibitor.uninhibit()
-        self.busy = False
-        job["state"] = status
-        self.get_queue_node(job).set(job, self.idToken)
-        self.dequeue(job)
+        try:
+            self.busy = False
+            self.active_job = None
+            self.inhibitor.uninhibit()
+            self.dequeue(job)
+            self.get_queue_node(job).set(job, self.idToken)
+            self.get_avail_node(job).remove(self.idToken)
+            self.update_state(job, status)
+            self.db.child("jobs").child("nodes").child(self.hostname).child("current-job").set("", self.idToken)
+            self.db.child("jobs").child("nodes").child(self.hostname).child("last-job").set(job['name'], self.idToken)
 
-        self.get_avail_node(job).remove(self.idToken)
-        self.db.child("jobs").child("nodes").child(self.hostname).child("current-job").set("", self.idToken)
-        self.db.child("jobs").child("nodes").child(self.hostname).child("last-job").set(job['name'], self.idToken)
-
-        self.log("Job complete", job)
+            self.log("Job complete", job)
+        except Exception as e:
+            self.log("Job failed %s" % e, job)
         if len(self.localjobqueue) > 0:
             self.processing(self.localjobqueue[0])
 

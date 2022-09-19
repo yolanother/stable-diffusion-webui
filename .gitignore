@@ -59,3 +59,5 @@ condaenv.*.requirements.txt
 /flagged/*
 /gfpgan/*
 /scripts/firebase_config.py
+osinfo.json
+z_version_env.tmp

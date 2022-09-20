@@ -61,3 +61,4 @@ condaenv.*.requirements.txt
 /scripts/firebase_config.py
 osinfo.json
 z_version_env.tmp
+appsettings.conf

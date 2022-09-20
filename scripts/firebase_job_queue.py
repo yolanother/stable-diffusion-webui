@@ -236,12 +236,15 @@ class FirebaseJobQueue:
         elif path is not None and path != "/":
             job_name = path[0]
             job = self.db.child("jobs").child("queue").child(job_name).get().val()
-            if "name" not in job:
-                job["name"] = job_name
-                self.db.child("jobs").child("queue").child(job_name).child("name").set(job_name, self.idToken)
+            if job is not None:
+                if "name" not in job:
+                    job["name"] = job_name
+                    self.db.child("jobs").child("queue").child(job_name).child("name").set(job_name, self.idToken)
 
-            self.log ("Received job", job)
-            self.handle_work(job)
+                self.log ("Received job", job)
+                self.handle_work(job)
+            else:
+                self.log("Job %s not found in queue." % job_name)
 
 
 def simulate_complete(jobqueue, job):

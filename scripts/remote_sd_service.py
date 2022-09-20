@@ -14,6 +14,7 @@ class FirebaseRemoteSDService(FirebaseJobQueue):
         self.tex2img = tex2img
         
     def start(self):
+        print (f"** SERVICE PID: {os.getpid()} **")
         self.job_queue.monitor_jobs()
 
     def save_mem_image(self, job, image, file=None, index=None):
@@ -45,7 +46,8 @@ class FirebaseRemoteSDService(FirebaseJobQueue):
         if "grid_file" in info and info['grid_file'] is not '':
             grid_file = info['grid_file']
             grid_path = os.path.join(info['outpath'], grid_file)
-            job["grid"] = uploader.upload_file(job, grid_path, grid_file)
+            job["grid"] = uploader.upload_file(grid_path, grid_file)
+            job['timestamp'] = time.time()
 
         #job["images"] = imageset
         return job
@@ -113,6 +115,10 @@ class FirebaseRemoteSDService(FirebaseJobQueue):
 
         self.job_queue.log("Job type %s is not recognized." % type, job)
         self.job_queue.job_complete(job)
+
+        print ('================= Job complete =================')
+        for r in range(0, 100):
+            print('                                       ')
 
 
 

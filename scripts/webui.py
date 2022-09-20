@@ -2244,7 +2244,7 @@ def run_headless():
 import remote_sd_service
 
 if __name__ == '__main__':
-    print ("Starting firebase service...")
+    print (f"Starting firebase service with ** SERVICE PID: {os.getpid()} **...")
     service = remote_sd_service.FirebaseRemoteSDService(txt2img)
     service.start()
     if opt.cli is None:

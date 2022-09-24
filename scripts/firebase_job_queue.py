@@ -66,33 +66,42 @@ class FirebaseJobQueue:
 
     def monitor_jobs(self):
         print ('Monitoring jobs...')
-        self.queue_root().stream(self.queue_update, idToken)
+        try:
+            self.queue_root().stream(self.queue_update, idToken)
+        except:
+            print("Error monitoring jobs.")
+            traceback.print_exc()
 
     def queue_update(self, status):
-        print(status)
-        ev = FirebaseUpdateEvent(status)
-        job = ev.segments[0]
-        log(ev)
+        try:
+            print(status)
+            ev = FirebaseUpdateEvent(status)
+            job = ev.segments[0]
+            log(ev)
 
-        if ev.data is None:
-            return
+            if ev.data is None:
+                return
 
-        if '/' == ev.path:
-            for job in ev.data.keys():
-                self.handle_job(job, ev.data[job])
-        if ev.segments[-1] == 'worker' and ev.data == self.hostname:
-            if job not in self.jobqueue:
-                log(f"Received job assignment for {job}.")
-                self.jobqueue.append(job)
-                if not self.busy:
-                    log(f"Not busy, processing job {job}.")
-                    self.process_job(job)
-                else:
-                    log(f"Busy, adding job {job} to queue.")
-        elif ev.segments[-1] == 'status':
-            self.handle_status(job, ev.data)
-        elif len(ev.segments) == 1:
-            self.handle_job(ev.segments[-1], ev.data)
+            if '/' == ev.path:
+                for job in ev.data.keys():
+                    self.handle_job(job, ev.data[job])
+            if ev.segments[-1] == 'worker' and ev.data == self.hostname:
+                if job not in self.jobqueue:
+                    log(f"Received job assignment for {job}.")
+                    self.jobqueue.append(job)
+                    if not self.busy:
+                        log(f"Not busy, processing job {job}.")
+                        self.process_job(job)
+                    else:
+                        log(f"Busy, adding job {job} to queue.")
+            elif ev.segments[-1] == 'status':
+                self.handle_status(job, ev.data)
+            elif len(ev.segments) == 1:
+                self.handle_job(ev.segments[-1], ev.data)
+        except Exception as e:
+            log(f"Error processing update: {e}")
+            traceback.print_exc()
+
 
     def handle_job(self, job, data):
         log(f"Handling job: {job} => {data}")
@@ -117,12 +126,12 @@ class FirebaseJobQueue:
                 self.cleanup_job(job)
 
     def update_state(self, job, state):
-        self.queue_node(job).update({u'status': state}, idToken)
-        self.data_job_node(job).update({u'status': state}, idToken)
-        self.data_job_node(job).update({u'timestamp': time.time()}, idToken)
+        self.update(self.queue_node(job), {u'status': state})
+        self.update(self.data_job_node(job), {u'status': state})
+        self.update(self.data_job_node(job),{u'timestamp': time.time()})
 
     def update_availability(self, job):
-        self.queue_node(job).child("available-nodes").child(self.hostname).set(not self.busy, idToken)
+        self.set(self.queue_node(job).child("available-nodes").child(self.hostname), not self.busy)
 
     def process_request(self, job):
 

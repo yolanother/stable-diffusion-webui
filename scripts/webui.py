@@ -1029,6 +1029,8 @@ skip_grid, sort_samples, sampler_name, ddim_eta, n_iter, batch_size, i, denoisin
                 if update_callbacks is not None:
                     if update_callbacks.image_added is not None:
                         update_callbacks.image_added(filename, i, image)
+                    if update_callbacks.cancelled:
+                        return
                 if add_original_image or not simple_templating:
                     output_images.append(image)
                     if simple_templating:

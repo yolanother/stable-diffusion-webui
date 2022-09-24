@@ -1,4 +1,5 @@
 import traceback
+from threading import Thread
 
 from firebase_job_queue import FirebaseJobQueue
 import time
@@ -50,7 +51,19 @@ class FirebaseRemoteSDService(FirebaseJobQueue):
             grid = uploader.upload_file(grid_path, grid_file)
             self.set(self.data_node(job).child("grid"), grid)
 
+    def on_job_canceled(self, job):
+        if job != self.active_job:
+            return
+        log("Job canceled", job)
+        self.complete_job(job, "canceled")
+        self.callbacks.cancelled = True
+
     def on_job_started(self, job):
+        self.active_thread = Thread(target=self.run_job, args=(job,))
+        self.active_thread.start()
+
+    def run_job(self, job):
+        self.active_job = job
         self.set(dbref.child("jobs").child('nodes').child(self.hostname).child('current-job'), job)
         data = self.get(self.data_node(job))
         print(data)
@@ -80,9 +93,9 @@ class FirebaseRemoteSDService(FirebaseJobQueue):
             variant_amount = float(parameters["variant_amount"]) if "variant_amount" in parameters else 0.0
             variant_seed = parameters["variant_seed"] if "variant_seed" in parameters else ''
 
-            callbacks = UpdateCallbacks()
+            self.callbacks = UpdateCallbacks()
 
-            callbacks.image_added = lambda file, i, image: self.save_mem_image(job, image, file + ".png", i)
+            self.callbacks.image_added = lambda file, i, image: self.save_mem_image(job, image, file + ".png", i)
 
             print("Generating prompt: " + prompt)
 
@@ -104,7 +117,7 @@ class FirebaseRemoteSDService(FirebaseJobQueue):
                         fp=fp, \
                         variant_amount=variant_amount, \
                         variant_seed=variant_seed,\
-                         update_callbacks=callbacks)
+                         update_callbacks=self.callbacks)
 
                 self.save_grid(job, info)
                 print(f"Finished job {job}")

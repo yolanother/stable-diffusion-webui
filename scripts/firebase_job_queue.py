@@ -42,15 +42,27 @@ class FirebaseJobQueue:
         self.set(self.data_job_node(job).child("timestamp"), time.time())
 
     def set(self, node, data):
-        print("Setting node: " + node.path)
-        node.set(data, idToken)
+        try:
+            print("Setting node: " + node.path)
+            node.set(data, idToken)
+        except Exception as e:
+            print(f"Error setting node: {node.path}: {e}")
+            traceback.print_exc()
 
     def update(self, node, data):
-        node.update(data, idToken)
+        try:
+            node.update(data, idToken)
+        except Exception as e:
+            print(f"Error setting node: {node.path}: {e}")
+            traceback.print_exc()
 
     def get(self, node):
-        print("Getting node: " + node.path)
-        return node.get(idToken).val()
+        try:
+            print("Getting node: " + node.path)
+            return node.get(idToken).val()
+        except Exception as e:
+            print(f"Error setting node: {node.path}: {e}")
+            traceback.print_exc()
 
     def monitor_jobs(self):
         print ('Monitoring jobs...')

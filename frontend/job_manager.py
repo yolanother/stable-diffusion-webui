@@ -27,6 +27,7 @@ class JobKey:
 class UpdateCallbacks:
     cancelled: bool = False
     image_added: Optional[Callable[[str, int, Image], None]] = None
+    iteration_started: Optional[Callable[[int], None]] = None
 
 @dataclass
 class JobInfo:

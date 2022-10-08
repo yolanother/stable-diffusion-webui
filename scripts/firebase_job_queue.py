@@ -128,10 +128,10 @@ class FirebaseJobQueue:
     def update_state(self, job, state):
         self.update(self.queue_node(job), {u'status': state})
         self.update(self.data_job_node(job), {u'status': state})
-        self.update(self.data_job_node(job),{u'timestamp': time.time()})
+        self.update(self.data_job_node(job), {u'timestamp': time.time()})
 
-    def update_availability(self, job):
-        self.set(self.queue_node(job).child("available-nodes").child(self.hostname), not self.busy)
+    def update_availability(self, job, busy):
+        self.set(self.queue_node(job).child("available-nodes").child(self.hostname), busy)
 
     def process_request(self, job):
 
@@ -140,7 +140,10 @@ class FirebaseJobQueue:
 
         if not self.busy:
             log(f"Received request. Announcing availability for job {job}.")
-            self.update_availability(job)
+            self.update_availability(job, True)
+        else:
+            log(f"Received request. Busy, adding job {job} to queue.")
+            self.update_availability(job, False)
 
     def process_job(self, job):
         try:
@@ -171,7 +174,7 @@ class FirebaseJobQueue:
             if queued is not None:
                 for job in queued.keys():
                     if job not in self.jobqueue:
-                        self.update_availability(job)
+                        self.update_availability(job, True)
 
     def cancel(self, job):
         self.complete_job(job, 'canceled')

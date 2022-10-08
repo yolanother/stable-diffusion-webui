@@ -877,6 +877,10 @@ def process_images(
                 break
 
             print(f"Iteration: {n+1}/{n_iter}")
+
+            if update_callbacks is not None:
+                if update_callbacks.iteration_started is not None:
+                    update_callbacks.iteration_started(n+1)
             prompts = all_prompts[n * batch_size:(n + 1) * batch_size]
             captions = prompt_matrix_parts[n * batch_size:(n + 1) * batch_size]
             seeds = all_seeds[n * batch_size:(n + 1) * batch_size]

@@ -9,6 +9,7 @@ import time
 from firebase_config import config
 from firebase_config import host_config
 from firebase_job_util import log, FirebaseUpdateEvent
+from scripts.webapi import post
 
 firebase = pyrebase.initialize_app(config)
 auth = firebase.auth().sign_in_with_email_and_password("firebasejobqueue@doubtech.com", config["apiKey"])
@@ -129,6 +130,7 @@ class FirebaseJobQueue:
         self.update(self.queue_node(job), {u'status': state})
         self.update(self.data_job_node(job), {u'status': state})
         self.update(self.data_job_node(job), {u'timestamp': time.time()})
+        post("job", None, f"name={job}", f"status={state}", f"node={self.hostname}")
 
     def update_availability(self, job, busy):
         self.set(self.queue_node(job).child("available-nodes").child(self.hostname), busy)
